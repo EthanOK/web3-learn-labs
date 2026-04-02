@@ -1,5 +1,5 @@
 {
-  "name": "web3-learn-labs",
+  "name": "@ethanok/web3-learn-labs",
   "type": "module",
   "version": "0.0.1",
   "description": "A starter for creating a TypeScript package.",
@@ -22,6 +22,8 @@
     "prettier": "bunx prettier --write \"{src,tests}/**/*.{js,ts,tsx,json,css,md}\"",
     "build": "bunx tsdown",
     "release": "bunx bumpp",
+    "prepublishOnly": "bun run build",
+    "publish": "bun publish",
     "avg-ticker": "bun run --watch utils/websocket/ticker/avg_ticker.ts"
   },
   "devDependencies": {

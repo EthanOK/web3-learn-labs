@@ -18,12 +18,16 @@
   "files": [
     "dist"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EthanOK/web3-learn-labs.git"
+  },
   "scripts": {
     "prettier": "bunx prettier --write \"{src,tests}/**/*.{js,ts,tsx,json,css,md}\"",
     "build": "bunx tsdown",
     "release": "bunx bumpp",
+    "publish:sdk": "bun publish",
     "prepublishOnly": "bun run build",
-    "publish": "bun publish",
     "avg-ticker": "bun run --watch utils/websocket/ticker/avg_ticker.ts"
   },
   "devDependencies": {

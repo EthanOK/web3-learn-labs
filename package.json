@@ -1,22 +1,35 @@
 {
   "name": "web3-learn-labs",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "module": "dist/index.js",
   "type": "module",
+  "version": "0.0.1",
+  "description": "A starter for creating a TypeScript package.",
+  "author": "Author Name <author.name@mail.com>",
+  "license": "MIT",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.cts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist"
   ],
   "scripts": {
     "prettier": "bunx prettier --write \"{src,tests}/**/*.{js,ts,tsx,json,css,md}\"",
-    "build": "bunx tsup ./src/index.ts --format esm,cjs --dts",
+    "build": "bunx tsdown",
+    "release": "bunx bumpp",
     "avg-ticker": "bun run --watch utils/websocket/ticker/avg_ticker.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "tsup": "^8.5.1"
+    "bumpp": "^11.0.1",
+    "tsdown": "^0.21.7"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^6.0.2"
   }
 }

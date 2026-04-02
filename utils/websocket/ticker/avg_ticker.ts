@@ -38,6 +38,11 @@ function isFresh(ps: PriceState, t = now()): boolean {
   return t - ps.ts <= STALE_AFTER_MS;
 }
 
+function displayPrice(ps: PriceState | undefined, t: number): string {
+  if (!ps) return "n/a";
+  return isFresh(ps, t) ? ps.price.toFixed(2) : "n/a";
+}
+
 function updatePrice(exchange: Exchange, symbol: string, price: number) {
   if (!Number.isFinite(price) || price <= 0) return;
   const st = state.get(symbol);
@@ -61,7 +66,7 @@ function updatePrice(exchange: Exchange, symbol: string, price: number) {
 
   const avg = parts.reduce((s, p) => s + p.price, 0) / parts.length;
   console.log(
-    `symbol: ${symbol}  avg(${parts.length}): ${avg.toFixed(2)}  (binance: ${bps?.price ?? "n/a"}  okx: ${ops?.price ?? "n/a"}  coinbase: ${cps?.price ?? "n/a"})`,
+    `symbol: ${symbol}  avg(${parts.length}): ${avg.toFixed(2)}  (binance: ${displayPrice(bps, t)}  okx: ${displayPrice(ops, t)}  coinbase: ${displayPrice(cps, t)})`,
   );
 }
 

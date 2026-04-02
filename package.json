@@ -1,12 +1,20 @@
 {
   "name": "web3-learn-labs",
-  "module": "index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "module": "dist/index.js",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "prettier": "bunx prettier --write \"{src,tests}/**/*.{js,ts,tsx,json,css,md}\"",
+    "build": "bunx tsup ./src/index.ts --format esm,cjs --dts",
     "avg-ticker": "bun run --watch utils/websocket/ticker/avg_ticker.ts"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "tsup": "^8.5.1"
   },
   "peerDependencies": {
     "typescript": "^5"

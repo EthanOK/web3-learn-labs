@@ -1,7 +1,7 @@
 {
   "name": "@ethanok/web3-learn-labs",
   "type": "module",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A starter for creating a TypeScript package.",
   "author": "Author Name <author.name@mail.com>",
   "license": "MIT",

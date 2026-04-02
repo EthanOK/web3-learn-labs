@@ -1,0 +1,14 @@
+{
+  "name": "web3-learn-labs",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "avg-ticker": "bun run --watch utils/websocket/ticker/avg_ticker.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

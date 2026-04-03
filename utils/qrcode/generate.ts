@@ -28,12 +28,12 @@ export type GenerateQrOptions = {
   /**
    * 交易金额（可选）。
    * - BTC: 直接使用 BTC 数量（例如 "0.001"）
-   * - ETH: 默认按 ETH 数量（例如 "0.01"），会转换成 wei 放到 `value` 参数里
+   * - ETH: 默认按 ETH 数量（例如 "0.01"），按 ERC-681 推荐写法编码到 `value`（如 "0.01e18"）
    */
   amount?: string | number;
   /**
    * amount 的单位（仅对 ETH 有意义）
-   * - "eth": 默认，把小数 ETH 转 wei
+   * - "eth": 默认，把 ETH 数量编码成 `value=<amount>e18`
    * - "wei": 直接把 amount 当成 wei（整数）
    */
   unit?: "eth" | "wei";
@@ -75,6 +75,15 @@ export function buildQrPayload(
 
   const amount = options.amount;
 
+  const normalizeDecimal = (value: string, maxDecimals: number): string => {
+    const v = value.trim();
+    if (!/^\d+(\.\d+)?$/.test(v)) throw new Error(`amount 格式不合法: ${value}`);
+    const [intPartRaw, fracRaw = ""] = v.split(".");
+    const intPart = intPartRaw.replace(/^0+/, "") || "0";
+    const fracTrimmed = fracRaw.slice(0, maxDecimals).replace(/0+$/, "");
+    return fracTrimmed ? `${intPart}.${fracTrimmed}` : intPart;
+  };
+
   const withQuery = (
     base: string,
     params: Record<string, string | undefined>,
@@ -102,11 +111,15 @@ export function buildQrPayload(
     if (amount === undefined) return `${scheme}:${address}`;
 
     const unit = options.unit ?? "eth";
-    const valueWei =
-      unit === "wei"
-        ? BigInt(String(amount).trim())
-        : parseDecimalToBigInt(String(amount), 18);
-    return withQuery(`${scheme}:${address}`, { value: valueWei.toString() });
+    if (unit === "wei") {
+      const valueWei = BigInt(String(amount).trim());
+      return withQuery(`${scheme}:${address}`, { value: valueWei.toString() });
+    }
+
+    // ERC-681: value 以 atomic unit(wei) 表示，允许科学计数法；建议用 exponent=18 表达 ETH 名义单位
+    // 仅允许整数：通过限制小数位 <= 18，确保 exponent(18) >= 小数位数
+    const normalizedEth = normalizeDecimal(String(amount), 18);
+    return withQuery(`${scheme}:${address}`, { value: `${normalizedEth}e18` });
   }
 
   if (chain === ChainEnum.Bitcoin || chain === ChainEnum.BitcoinTestnet) {

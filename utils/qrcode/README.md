@@ -38,7 +38,7 @@
 
 ### 2.3 金额（`amount` / `unit`）
 
-- **ETH / Sepolia**：默认 `unit: "eth"`，金额转为 **wei** 写入 URI 的 `value`；`unit: "wei"` 时把 `amount` 当作整数 wei。  
+- **ETH / Sepolia**：默认 `unit: "eth"`，按 ERC-681 推荐使用科学计数法写入 URI 的 `value`（形如 `value=<eth数量>e18`）；`unit: "wei"` 时把 `amount` 当作整数 wei。  
 - **BTC / BTC Testnet**：`amount` 作为 BTC 数量字符串写入 `amount` 查询参数（如 `"0.001"`）。
 
 ### 2.4 收款示例：二维码里编码的字符串长什么样
@@ -47,16 +47,16 @@
 
 #### 0.1 ETH（主网）
 
-- 逻辑：`amount: "0.1"` 且默认 `unit: "eth"` 时，先换算成 **wei（18 位小数）**，再写入查询参数 **`value`**。`value` 为**整数字符串**，不是 `0.1`。
-- 换算：\(0.1 \times 10^{18} =\) **`100000000000000000`** wei。
+- 逻辑：`amount: "0.1"` 且默认 `unit: "eth"` 时，按 ERC-681 推荐写法写入查询参数 **`value`**：`value=<eth数量>e18`。
+- 等价关系：`value=0.1e18` 与 `value=100000000000000000`（wei）等价，但前者更直观。
 
 示例（地址请换成真实收款地址）：
 
 ```text
-ethereum:0x你的地址?value=100000000000000000
+ethereum:0x你的地址?value=0.1e18
 ```
 
-Sepolia：`sepolia:0x你的地址?value=100000000000000000`。
+Sepolia：`sepolia:0x你的地址?value=0.1e18`。
 
 若使用 `unit: "wei"` 且 `amount: "100000000000000000"`，结果与上面一致（不再做 ETH 小数解析）。
 
@@ -76,7 +76,7 @@ bitcoin:你的地址?amount=0.1
 
 | 资产 | URI 参数名 | 参数含义 | `0.1` 时的取值 |
 |------|------------|----------|----------------|
-| ETH / Sepolia | `value` | wei（整数，字符串） | `100000000000000000` |
+| ETH / Sepolia | `value` | ERC-681 number（推荐 `e18` 写法） | `0.1e18` |
 | BTC | `amount` | BTC 数量（十进制字符串） | `0.1` |
 
 不同钱包对 `ethereum:` / `bitcoin:` 及金额参数的支持程度不一，上线前应用目标钱包实扫验证。

@@ -28,7 +28,8 @@
     "release": "bunx bumpp",
     "publish:sdk": "bun publish",
     "prepublishOnly": "bun run build",
-    "avg-ticker": "bun run --watch utils/websocket/ticker/avg_ticker.ts"
+    "avg-ticker": "bun run --watch utils/websocket/ticker/avg_ticker.ts",
+    "qr:styled": "bun --hot utils/qrcode/styled_serve.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -40,6 +41,7 @@
     "typescript": "^6.0.2"
   },
   "dependencies": {
+    "qr-code-styling": "^1.9.2",
     "qrcode": "^1.5.4"
   }
 }

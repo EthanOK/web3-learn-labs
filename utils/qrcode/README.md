@@ -1,12 +1,21 @@
-# 链上地址二维码工具说明
+# 链上抵押 / 收款地址二维码（URI 编码说明）
 
-基于 `qrcode` 包：从 ETH / BTC（含测试网）地址生成 **URI 或纯地址** 的二维码，输出 **DataURL、PNG、终端字符**；适合脚本与后端复用同一套拼装逻辑。入口为 `generate.ts`。
+**定位**：说明 **抵押 / 收款地址给用户扫的二维码** 里，应编码成怎样的 **`ethereum:` / `bitcoin:` URI**（含可选金额）。**典型用途**：抵押、充值等场景的地址展示，用户用手机钱包扫码后自动带出地址与金额，减少手抄错误。
+
+**URI 字符串**的拼装规则见下文；把该字符串交给二维码库即可出图。
+
+- **前端展示（推荐）**：需要更好的视觉效果（圆角点阵、中心 Logo、纠错等级、导出 PNG 等）时，建议使用 **[qr-code-styling](https://github.com/kozakdenys/qr-code-styling)** 的 **`QRCodeStyling`**。扫码内容仍是同一套 `ethereum:` / `bitcoin:` 文本，与库无关。本仓库可参考 `styled-preview-client.ts`（配置样式与 `data`）与 `styled_serve.ts`（本地预览页）。
+- **脚本 / 联调**：`generate.ts` 基于 `qrcode` 包实现相同 URI 规则，并可输出 **DataURL、PNG、终端字符**。
 
 ## 1. 目录结构
 
 | 文件 | 说明 |
 |------|------|
 | `generate.ts` | 地址识别、URI 拼装、生成 DataURL / PNG / 终端字符；含 CLI。 |
+| `styled-preview-client.ts` | 前端参考：`QRCodeStyling` 圆角样式、中心 `logo.svg`、下载 PNG。 |
+| `styled_serve.ts` | 本地预览：`bun run qr:styled`（见 `package.json`）。 |
+| `styled-preview.html` | 预览页 HTML。 |
+| `logo.svg` | 样式二维码中心图。 |
 
 ## 2. `generate.ts`：链与 URI 规则
 
@@ -74,32 +83,7 @@ bitcoin:你的地址?amount=0.1
 
 ### 2.5 二维码图像参数
 
-`GenerateQrOptions` 可选：`errorCorrectionLevel`（`L`/`M`/`Q`/`H`）、`margin`、`scale`。
-
-### 2.6 导出的 API
-
-| 函数 | 说明 |
-|------|------|
-| `buildQrPayload(options)` | 返回最终扫码字符串（不画图）。 |
-| `generateQrDataURL(options)` | 返回 `data:image/png;base64,...`。 |
-| `generateQrPngBuffer(options)` | `Uint8Array` PNG。 |
-| `generateQrPngFile(outFile, options)` | 写入磁盘。 |
-| `generateQrTerminalString(options)` | 终端 ASCII；`small: true` 更紧凑。 |
-
-在其它 TS 模块中：
-
-```ts
-import {
-  buildQrPayload,
-  generateQrDataURL,
-  generateQrPngFile,
-} from "./utils/qrcode/generate.ts";
-
-await generateQrPngFile("out.png", {
-  address: "0x...",
-  amount: "0.01",
-});
-```
+`generate.ts` 生成 PNG 等时可选：`errorCorrectionLevel`（`L`/`M`/`Q`/`H`）、`margin`、`scale`。
 
 ## 3. CLI（`generate.ts`）
 
@@ -121,13 +105,15 @@ bun utils/qrcode/generate.ts --terminal bc1YourBtcAddress --small --amount 0.001
 
 ## 4. 依赖
 
-- `qrcode`：`generate.ts`。
+- `qrcode`：`generate.ts`。  
+- `qr-code-styling`：前端样式二维码（`QRCodeStyling`），见 `styled-preview-client.ts`。
 
 ## 5. 注意点（给接入方）
 
 1. **URI 与钱包兼容性**：不同钱包对 `ethereum:` / `bitcoin:` 参数支持程度不一，上线前用目标钱包实扫验证。  
-2. **Sepolia**：地址形态与主网相同，自动识别会落在 `Ethereum`；测试网需 **`chain: "Sepolia"`**（或等价枚举键）才能生成 `sepolia:` scheme。
+2. **Sepolia**：地址形态与主网相同，自动识别会落在 `Ethereum`；测试网需 **`chain: "Sepolia"`**（或等价枚举键）才能生成 `sepolia:` scheme。  
+3. **样式与内容分离**：`QRCodeStyling` 只影响外观；**必须**保证传入的 `data` 与下文 URI 规则一致，否则钱包解析会错。
 
 ---
 
-*若与源码行为不一致，以 `generate.ts` 为准。*
+*URI 拼装以 `generate.ts` 为准；样式参数以 `styled-preview-client.ts` 为准。*

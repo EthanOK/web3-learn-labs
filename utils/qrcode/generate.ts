@@ -1,48 +1,28 @@
 // 给定 ETH 或 BTC 地址，生成二维码
 
+import { encodeBIP321, validateBitcoinAddress } from "bip-321";
+import { build as buildEthUrl } from "eth-url-parser";
+import type { BuildInput } from "eth-url-parser";
 import * as QRCode from "qrcode";
 
-export enum ChainEnum {
-  //mainnet
-  Ethereum = "Ethereum",
-  Bitcoin = "Bitcoin",
-  // Testnet
-  Sepolia = "Sepolia",
-  BitcoinTestnet = "BitcoinTestnet",
-}
+/** `detectChainFromAddress` 的返回值 */
+export type DetectedAddressKind = "ethereum" | "bitcoin";
 
-export type Chain = keyof typeof ChainEnum;
-
+/** 收款二维码：仅地址 + 可选金额 + 可选 EVM chainId；EVM/BTC 由地址格式推断 */
 export type GenerateQrOptions = {
   address: string;
-  /**
-   * 默认会根据地址格式自动判断（ETH: 0x..., BTC: bc1.../1.../3...）
-   * 如果你希望强制某条链，可以显式传入。
-   */
-  chain?: Chain;
-  /**
-   * 生成二维码的内容格式。默认使用 `<scheme>:<address>`（ethereum:/bitcoin:）。
-   * 传 `address` 则只编码原始地址字符串。
-   */
-  format?: "uri" | "address";
-  /**
-   * 交易金额（可选）。
-   * - BTC: 直接使用 BTC 数量（例如 "0.001"）
-   * - ETH: 默认按 ETH 数量（例如 "0.01"），按 ERC-681 推荐写法编码到 `value`（如 "0.01e18"）
-   */
+  /** 可选。EVM：`amount` 为 ETH 小数；BTC：为 BTC 小数（如 `"0.001"`） */
   amount?: string | number;
-  /**
-   * amount 的单位（仅对 ETH 有意义）
-   * - "eth": 默认，把 ETH 数量编码成 `value=<amount>e18`
-   * - "wei": 直接把 amount 当成 wei（整数）
-   */
-  unit?: "eth" | "wei";
-  /**
-   * 二维码尺寸/冗余参数
-   */
-  errorCorrectionLevel?: "L" | "M" | "Q" | "H";
-  margin?: number;
-  scale?: number;
+  /** 可选。仅 EVM：`ethereum:0x...@<chainId>`；Sepolia 一般为 `11155111` */
+  chainId?: string | number;
+  /** 可选。仅 BTC（BIP-321）：`label` 查询参数 */
+  label?: string;
+};
+
+const QR_IMAGE_DEFAULTS = {
+  errorCorrectionLevel: "M" as const,
+  margin: 2,
+  scale: 8,
 };
 
 const ETH_RE = /^0x[a-fA-F0-9]{40}$/;
@@ -52,94 +32,94 @@ const BTC_BECH32_RE = /^(bc1)[0-9a-z]{25,90}$/;
 const BTC_TESTNET_BECH32_RE = /^(tb1)[0-9a-z]{25,90}$/;
 const BTC_TESTNET_BASE58_RE = /^(2)[a-km-zA-HJ-NP-Z1-9]{25,34}$/;
 
-export function detectChainFromAddress(address: string): Chain {
+export function detectChainFromAddress(address: string): DetectedAddressKind {
   const a = address.trim();
-  if (ETH_RE.test(a)) return ChainEnum.Ethereum;
-  if (BTC_BECH32_RE.test(a) || BTC_BASE58_RE.test(a)) return ChainEnum.Bitcoin;
-  if (BTC_TESTNET_BECH32_RE.test(a) || BTC_TESTNET_BASE58_RE.test(a))
-    return ChainEnum.BitcoinTestnet;
+  if (ETH_RE.test(a)) return "ethereum";
+  if (
+    BTC_BECH32_RE.test(a) ||
+    BTC_BASE58_RE.test(a) ||
+    BTC_TESTNET_BECH32_RE.test(a) ||
+    BTC_TESTNET_BASE58_RE.test(a)
+  )
+    return "bitcoin";
   throw new Error(`无法识别地址类型: ${address}`);
 }
 
-export function buildQrPayload(
-  options: Pick<
-    GenerateQrOptions,
-    "address" | "chain" | "format" | "amount" | "unit"
-  >,
-): string {
-  const address = options.address.trim();
-  const chain = options.chain ?? detectChainFromAddress(address);
-  const format = options.format ?? "uri";
+function resolveEip681ChainId(chainId?: string | number): `${number}` | null {
+  const raw = chainId === undefined ? "" : String(chainId).trim();
+  if (raw === "") return null;
+  if (!/^\d+$/.test(raw)) {
+    throw new Error(`chainId 须为十进制正整数: ${chainId}`);
+  }
+  return raw as `${number}`;
+}
 
-  if (format === "address") return address;
+export function buildQrPayload(options: GenerateQrOptions): string {
+  const address = options.address.trim();
+  const chain = detectChainFromAddress(address);
 
   const amount = options.amount;
 
   const normalizeDecimal = (value: string, maxDecimals: number): string => {
     const v = value.trim();
-    if (!/^\d+(\.\d+)?$/.test(v)) throw new Error(`amount 格式不合法: ${value}`);
-    const [intPartRaw, fracRaw = ""] = v.split(".");
+    if (!/^\d+(\.\d+)?$/.test(v))
+      throw new Error(`amount 格式不合法: ${value}`);
+    const [intPartRaw = "", fracRaw = ""] = v.split(".");
     const intPart = intPartRaw.replace(/^0+/, "") || "0";
     const fracTrimmed = fracRaw.slice(0, maxDecimals).replace(/0+$/, "");
     return fracTrimmed ? `${intPart}.${fracTrimmed}` : intPart;
   };
 
-  const withQuery = (
-    base: string,
-    params: Record<string, string | undefined>,
-  ) => {
-    const qs = Object.entries(params)
-      .filter(([, v]) => v !== undefined && v !== "")
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v!)}`)
-      .join("&");
-    return qs ? `${base}?${qs}` : base;
-  };
+  // EVM：`eth-url-parser`（@types/eth-url-parser）按 ERC-681 拼装 `ethereum:`，并对 `value` 做科学计数法规范化
+  if (chain === "ethereum") {
+    const input: BuildInput = { target_address: address };
+    const cid = resolveEip681ChainId(options.chainId);
+    if (cid !== null) input.chain_id = cid;
 
-  const parseDecimalToBigInt = (value: string, decimals: number): bigint => {
-    const v = value.trim();
-    if (!/^\d+(\.\d+)?$/.test(v))
-      throw new Error(`amount 格式不合法: ${value}`);
-    const [intPart, fracPart = ""] = v.split(".");
-    const frac = fracPart.padEnd(decimals, "0").slice(0, decimals);
-    const combined = `${intPart}${frac}`.replace(/^0+/, "") || "0";
-    return BigInt(combined);
-  };
-
-  // 常见钱包可识别的 URI scheme
-  if (chain === ChainEnum.Ethereum || chain === ChainEnum.Sepolia) {
-    const scheme = chain === ChainEnum.Sepolia ? "sepolia" : "ethereum";
-    if (amount === undefined) return `${scheme}:${address}`;
-
-    const unit = options.unit ?? "eth";
-    if (unit === "wei") {
-      const valueWei = BigInt(String(amount).trim());
-      return withQuery(`${scheme}:${address}`, { value: valueWei.toString() });
+    if (amount !== undefined) {
+      const normalizedEth = normalizeDecimal(String(amount), 18);
+      input.parameters = { value: `${normalizedEth}e18` };
     }
 
-    // ERC-681: value 以 atomic unit(wei) 表示，允许科学计数法；建议用 exponent=18 表达 ETH 名义单位
-    // 仅允许整数：通过限制小数位 <= 18，确保 exponent(18) >= 小数位数
-    const normalizedEth = normalizeDecimal(String(amount), 18);
-    return withQuery(`${scheme}:${address}`, { value: `${normalizedEth}e18` });
+    // console.log(input);
+    const result = buildEthUrl(input);
+    // console.log(result);
+    return result;
   }
 
-  if (chain === ChainEnum.Bitcoin || chain === ChainEnum.BitcoinTestnet) {
-    const scheme = "bitcoin";
-    if (amount === undefined) return `${scheme}:${address}`;
-    return withQuery(`${scheme}:${address}`, { amount: String(amount).trim() });
+  if (chain === "bitcoin") {
+    const v = validateBitcoinAddress(address);
+    if (!v.valid) {
+      throw new Error(v.error ?? "Invalid bitcoin address");
+    }
+    const amountNum =
+      amount === undefined
+        ? undefined
+        : Number.parseFloat(String(amount).trim());
+    if (amount !== undefined) {
+      if (Number.isNaN(amountNum!) || amountNum! < 0) {
+        throw new Error(`BTC amount 不合法: ${amount}`);
+      }
+    }
+    const labelRaw =
+      options.label === undefined ? "" : String(options.label).trim();
+    const label = labelRaw === "" ? undefined : labelRaw;
+
+    const extra: { amount?: number; label?: string } = {};
+    if (amountNum !== undefined) extra.amount = amountNum;
+    if (label !== undefined) extra.label = label;
+
+    return encodeBIP321({ address, ...extra }).uri;
   }
 
-  return `unknown:${address}`;
+  return `${address}`;
 }
 
 export async function generateQrDataURL(
   options: GenerateQrOptions,
 ): Promise<string> {
   const payload = buildQrPayload(options);
-  return await QRCode.toDataURL(payload, {
-    errorCorrectionLevel: options.errorCorrectionLevel ?? "M",
-    margin: options.margin ?? 2,
-    scale: options.scale ?? 8,
-  });
+  return await QRCode.toDataURL(payload, QR_IMAGE_DEFAULTS);
 }
 
 export async function generateQrPngBuffer(
@@ -148,9 +128,7 @@ export async function generateQrPngBuffer(
   const payload = buildQrPayload(options);
   const buf = await QRCode.toBuffer(payload, {
     type: "png",
-    errorCorrectionLevel: options.errorCorrectionLevel ?? "M",
-    margin: options.margin ?? 2,
-    scale: options.scale ?? 8,
+    ...QR_IMAGE_DEFAULTS,
   });
   return new Uint8Array(buf);
 }
@@ -175,9 +153,7 @@ export async function generateQrTerminalString(
   return await QRCode.toString(payload, {
     type: "terminal",
     small: options.small ?? false,
-    errorCorrectionLevel: options.errorCorrectionLevel ?? "M",
-    margin: options.margin ?? 2,
-    scale: options.scale ?? 8,
+    ...QR_IMAGE_DEFAULTS,
   });
 }
 
@@ -185,7 +161,7 @@ function printUsage() {
   // 仅用于 CLI：保持最小且清晰
   // eslint-disable-next-line no-console
   console.log(
-    "用法:\n  bun utils/qrcode/generate.ts <地址> [out.png] [--amount 0.01]\n  bun utils/qrcode/generate.ts --terminal <地址> [--small] [--amount 0.01]",
+    "用法:\n  bun utils/qrcode/generate.ts <地址> [out.png] [--amount 0.01] [--chainId 11155111] [--label 备注]\n  bun utils/qrcode/generate.ts --terminal <地址> [--small] [--amount 0.01] [--chainId 11155111] [--label 备注]\n  （--label 仅对 BTC 地址生效，写入 BIP-321 的 label 参数）",
   );
 }
 
@@ -196,30 +172,44 @@ if (import.meta.main) {
   const amountIdx = args.indexOf("--amount");
   const amount =
     amountIdx >= 0 && args[amountIdx + 1] ? args[amountIdx + 1] : undefined;
+  const chainIdIdx = args.indexOf("--chainId");
+  const chainId =
+    chainIdIdx >= 0 && args[chainIdIdx + 1] ? args[chainIdIdx + 1] : undefined;
+  const labelIdx = args.indexOf("--label");
+  const label =
+    labelIdx >= 0 && args[labelIdx + 1] ? args[labelIdx + 1] : undefined;
 
   const rest = args.filter(
     (x, i) =>
       x !== "--terminal" &&
       x !== "--small" &&
       x !== "--amount" &&
-      i !== amountIdx + 1,
+      i !== amountIdx + 1 &&
+      x !== "--chainId" &&
+      i !== chainIdIdx + 1 &&
+      x !== "--label" &&
+      i !== labelIdx + 1,
   );
   const [address, outFile] = rest;
 
   if (!address) {
     printUsage();
     process.exitCode = 1;
-  } else if (terminal) {
-    const s = await generateQrTerminalString({ address, small, amount });
-    // eslint-disable-next-line no-console
-    console.log(s);
-  } else if (outFile) {
-    await generateQrPngFile(outFile, { address, amount });
-    // eslint-disable-next-line no-console
-    console.log(`已写入: ${outFile}`);
   } else {
-    const dataUrl = await generateQrDataURL({ address, amount });
-    // eslint-disable-next-line no-console
-    console.log(dataUrl);
+    const qrOpts: GenerateQrOptions = { address, amount, chainId, label };
+
+    if (terminal) {
+      const s = await generateQrTerminalString({ ...qrOpts, small });
+      // eslint-disable-next-line no-console
+      console.log(s);
+    } else if (outFile) {
+      await generateQrPngFile(outFile, qrOpts);
+      // eslint-disable-next-line no-console
+      console.log(`已写入: ${outFile}`);
+    } else {
+      const dataUrl = await generateQrDataURL(qrOpts);
+      // eslint-disable-next-line no-console
+      console.log(dataUrl);
+    }
   }
 }

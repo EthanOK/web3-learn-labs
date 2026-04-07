@@ -41,6 +41,8 @@
     "typescript": "^6.0.2"
   },
   "dependencies": {
+    "bip-321": "^0.0.10",
+    "eth-url-parser": "^1.0.4",
     "qr-code-styling": "^1.9.2",
     "qrcode": "^1.5.4"
   }
